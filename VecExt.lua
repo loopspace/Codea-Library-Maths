@@ -30,6 +30,7 @@ local sinh = math.sinh
 local cosh = math.cosh
 local tanh = math.tanh
 local huge = math.huge
+local random = math.random
 
 local _modelMatrix = modelMatrix
 local _applyMatrix = applyMatrix
@@ -48,6 +49,14 @@ local _text = text
 local _clip = clip
 
 local tolerance = 0.0000001
+local function __quat(a,b,c,d)
+    local q = quat()
+    q.w = a
+    q.x = b
+    q.y = c
+    q.z = d
+    return q
+end
 
 --[[
 The function "is_a" extends the capabilities of the method "is_a" which is automatically defined by Codea for classes.
@@ -65,24 +74,30 @@ The tests work as follows.
 --]]
 
 function is_a(a,b)
-   if type(b) == "function" then
-      b = b()
-   end
-   if type(b) == "string" then
-      return type(a) == b
-   end
-   if type(b) == "table"
-      and type(a) == "table"
-      and a.is_a
-   then
-      return a:is_a(b)
-   end
-   if type(b) == "userdata"
-      and type(a) == "userdata"
-   then
-      return  getmetatable(a) == getmetatable(b)
-   end
-   return false
+    if type(b) == "function" then
+        b = b()
+    end
+    if type(b) == "table" and b.___type then
+        b = b()
+    end
+    if type(b) == "string" then
+        return type(a) == b
+    end
+    if type(b) == "table"
+    and type(a) == "table"
+    and a.is_a
+    then
+        return a:is_a(b)
+    end
+    if type(b) == "userdata"
+    and type(a) == "userdata"
+    then
+        if a.___type or b.___type then
+            return a.___type == b.___type
+        end
+        return  getmetatable(a) == getmetatable(b)
+    end
+    return false
 end
 
 if not edge then
@@ -129,6 +144,7 @@ function setComplex(t)
    tostring = t.tostring or tostring
 end
 
+-- Promote vec2 to complex numbers
 m = getmetatable(vec2())
 
 if not m.__extended then
@@ -329,6 +345,12 @@ if not m.__extended then
     
     m["distinf"] = function(c,v)
         return max(abs(c.x - v.x), abs(c.y - v.y))
+    end
+
+    m["random"] = function(rnd)
+        rnd = rnd or random
+        local th = 2*pi*rnd()
+        return vec2(cos(th),sin(th))
     end
 end
 
@@ -850,6 +872,26 @@ if not qGravity then
 	 return vec4(a,b,c,d)
       end
    end
+    
+   function quatGravity()
+      if Gravity.x == 0
+	 and Gravity.y == 0
+      then
+	 return __quat(1,0,0,0)
+      else
+	 local gxy, gy, gygxy, a, b, c, d
+	 gy,gxy = - Gravity.y,sq(pow(Gravity.x,2) + pow(Gravity.y,2))
+	 gygxy = gy/gxy
+	 a,b,c,d = sqrt(1 + gxy - gygxy - gy)/2, sqrt(1 - gxy - gygxy + gy)/2, sqrt(1 - gxy + gygxy - gy)/2, sqrt(1 + gxy + gygxy + gy)/2
+	 if Gravity.z < 0 then
+	    b,c = - b,-c
+	 end
+	 if Gravity.x > 0 then
+	    c,d = - c,-d
+	 end
+	 return __quat(a,b,c,d)
+      end
+   end
    
    function qRotation(a,x,y,z)
         local q,c,s
@@ -918,9 +960,15 @@ if not qGravity then
       return qTangent(DeltaTime * RotationRate)
    end
    
+    function quatRotationRate()
+      return quat.tangent(DeltaTime * RotationRate)
+   end
+
    function modelMatrix(m)
       if m then
 	 if is_a(m,vec4) then
+	    m = m:tomatrixright()
+	 elseif is_a(m,quat) then
 	    m = m:tomatrixright()
 	 elseif is_a(m,vec2) then
 	    m = m:tomatrix()
@@ -935,6 +983,8 @@ if not qGravity then
       if m then
 	 if is_a(m,vec4) then
 	    m = m:tomatrixright()
+	 elseif is_a(m,quat) then
+	    m = m:tomatrixright()
 	 elseif is_a(m,vec2) then
 	    m = m:tomatrix()
 	 end
@@ -948,6 +998,8 @@ if not qGravity then
       if m then
 	 if is_a(m,vec4) then
 	    m = m:tomatrixright()
+	 elseif is_a(m,quat) then
+	    m = m:tomatrixright()
 	 elseif is_a(m,vec2) then
 	    m = m:tomatrix()
 	 end
@@ -960,6 +1012,8 @@ if not qGravity then
    function projectionMatrix(m)
       if m then
 	 if is_a(m,vec4) then
+	    m = m:tomatrixright()
+	 elseif is_a(m,quat) then
 	    m = m:tomatrixright()
 	 elseif is_a(m,vec2) then
 	    m = m:tomatrix()
@@ -978,6 +1032,11 @@ if not qGravity then
    
    function rotate(a,x,y,z)
       if is_a(a,vec4) then
+	 local v
+	 a,v = a:toangleaxis()
+	 x,y,z,a = v.x,v.y,v.z,a*180/pi
+      end
+      if is_a(a,quat) then
 	 local v
 	 a,v = a:toangleaxis()
 	 x,y,z,a = v.x,v.y,v.z,a*180/pi
@@ -1139,20 +1198,31 @@ if not m.__extended then
    m["applyQuaternion"] = function (v,q)
       return q:__mul(v:toQuaternion()):__mul(q:conjugate()):vector()
    end
-   
-   m["rotate"] = function(v,q,x,y,z)
-      if is_a(q,"number") then
-	 q = qRotation(q,x,y,z)
-      end
-      return v:applyQuaternion(q)
-   end
-   
+
+    m["toquat"] = function (v)
+        return __quat(0,v.x,v.y,v.z)
+    end
+    
+    m["applyquat"] = function (v,q)
+        return q:__mul(v:toquat()):__mul(q:conjugate()):vector()
+    end
+    
+    m["rotate"] = function(v,q,x,y,z)
+        if is_a(q,"number") then
+            q = quat.angleAxis(q,x,y,z)
+        end
+        return v:applyquat(q)
+    end
+    
    m["__pow"] = function (v,q)
-      if is_a(q,vec4) then
-	 return v:applyQuaternion(q)
-      end
-      return false
-   end
+        if is_a(q,quat) then
+            return v:applyquat(q)
+        end
+        if is_a(q,vec4) then
+            return v:applyQuaternion(q)
+        end
+        return false
+    end
    
    m["__concat"] = function (u,s)
       if is_a(s,"string") then
@@ -1185,6 +1255,10 @@ if not m.__extended then
         local d = u:dot(v)
         u = u:cross(v)
         return vec4(d,u.x,u.y,u.z)
+    end
+    
+    m["rotateToquat"] = function (u,v)
+        return quat.fromToRotation(u,v)
     end
    
    m["normalise"] = function (v)
@@ -1271,6 +1345,14 @@ if not m.__extended then
         return max(abs(c.x - v.x), abs(c.y - v.y), abs(c.z - v.z))
     end
    
+    m["random"] = function(rnd)
+        rnd = rnd or random
+        local th = 2*pi*rnd()
+        local z = 2*rnd() - 1
+        local r = sqrt(1 - z*z)
+        return vec3(r*cos(th),r*sin(th),z)
+    end
+    
    m.__extended = true
 end
 
@@ -1284,6 +1366,16 @@ if not m.__extended then
       then
 	 return mmul(m,mm)
       end
+        if is_a(m,matrix)
+        and is_a(mm,quat)
+        then
+            return mmul(m,qQuat(mm):tomatrix())
+        end
+        if is_a(m,quat)
+        and is_a(mm,matrix)
+        then
+            return mmul(qQuat(m):tomatrix(),mm)
+        end
       if is_a(m,matrix)
 	 and is_a(mm,vec4)
       then
@@ -1329,10 +1421,412 @@ if not m.__extended then
 	 a,x = a:toangleaxis()
 	 x,y,z = x.x,x.y,x.z
       end
+        if is_a(a,quat) then
+            a,x = a:toangleaxis()
+            x,y,z = x.x,x.y,x.z
+        end
       return mrotate(m,a,x,y,z)
    end
    
    m.__extended = true
+end
+
+function extendQuat()
+    local mq,m
+    mq = getmetatable(quat())
+    if mq.__extended then
+        return
+    end
+    
+    m = {}
+    m["is_finite"] = function(q)
+        if q.x < huge
+        and q.x > -huge
+        and q.y < huge
+        and q.y > -huge
+        and q.z < huge
+        and q.z > -huge
+        and q.w < huge
+        and q.w > -huge
+        then
+            return true
+        end
+        return false
+    end
+    
+    m["is_real"] = function (q)
+        if q.y ~= 0
+        or q.z ~= 0
+        or q.x ~= 0
+        then
+            return false
+        end
+        return true
+    end
+    
+    m["is_imaginary"] = function (q)
+        return q.w == 0
+    end
+    
+    m["normalise"] = function (q)
+        q = q:normalize()
+        if q:is_finite() then
+            return q
+        else
+            return __quat(1,0,0,0)
+        end
+    end
+    
+    m["len"] = function(q)
+        return sqrt(q.x*q.x+q.y*q.y+q.z*q.z+q.w*q.w)
+    end
+    
+    m["lenSqr"] = function(q)
+        return q.x*q.x+q.y*q.y+q.z*q.z+q.w*q.w
+    end
+    
+    m["dist"] = function(q,qq)
+        return sqrt((q.x-qq.x)^2+(q.y-qq.y)^2+(q.z-qq.z)^2+(q.w-qq.w)^2)
+    end
+    
+    m["distSqr"] = function(q,qq)
+        return (q.x-qq.x)^2+(q.y-qq.y)^2+(q.z-qq.z)^2+(q.w-qq.w)^2
+    end
+    
+    m["dot"] = function(q,qq)
+        return q.x*qq.x + q.y*qq.y + q.z*qq.z + q.w*qq.w
+    end
+    
+    m["normalize"] = function(q)
+        return q/q:len()
+    end
+    
+    m["slen"] = function(q)
+        q = q:normalise()
+        q.w = q.w - 1
+        return 2*asin(q:len()/2)
+    end
+    
+    m["sdist"] = function(q,qq)
+        q = q:normalise()
+        qq = qq:normalise()
+        return 2*asin(q:dist(qq)/2)
+    end
+    
+    m["len1"] = function(c)
+        return abs(c.x) + abs(c.y) + abs(c.z) + abs(c.w)
+    end
+    
+    m["dist1"] = function(c,v)
+        return abs(c.x - v.x) + abs(c.y - v.y) + abs(c.z - v.z) + abs(c.w - v.w)
+    end
+    
+    m["leninf"] = function(c)
+        return max(abs(c.x), abs(c.y), abs(c.z), abs(c.w))
+    end
+    
+    m["distinf"] = function(c,v)
+        return max(abs(c.x - v.x), abs(c.y - v.y), abs(c.z - v.z), abs(c.w - v.w))
+    end
+    
+    local mulq = mq["__mul"]
+    
+    rawset(quat,"tangent",function(x,y,z,t)
+        local q
+        if is_a(x,"number") then
+            q,t = __quat(0,x,y,z), t or 1
+        else
+            q,t = __quat(0,x.x,x.y,x.z), y or 1
+        end
+        local qn = q:normalise()
+        if qn == __quat(1,0,0,0) then
+            return qn
+        end
+        t = t * q:len()
+        return cos(t)*__quat(1,0,0,0) + sin(t)*qn
+    end)
+    
+    rawset(quat,"random",function(rnd)
+        rnd = rnd or random
+        local u,v,w = rnd(),2*pi*rnd(),2*pi*rnd()
+        local s,t = sqrt(1-u),sqrt(u)
+        return __quat(s*sin(v),s*cos(v),t*sin(w),t*cos(w))
+    end)
+    
+    m["__add"] = function (a,b)
+        if is_a(a,"number") then
+            a = __quat(a,0,0,0)
+        end
+        if is_a(b,"number") then
+            b = __quat(b,0,0,0)
+        end
+        return __quat(a.w+b.w,a.x+b.x,a.y+b.y,a.z+b.z)
+    end
+    
+    m["__sub"] = function (a,b)
+        if is_a(a,"number") then
+            a = __quat(a,0,0,0)
+        end
+        if is_a(b,"number") then
+            b = __quat(b,0,0,0)
+        end
+        return __quat(a.w-b.w,a.x-b.x,a.y-b.y,a.z-b.z)
+    end
+    
+    m["__mul"] = function (a,b)
+        if is_a(a,"number") then
+            return __quat(a*b.w,a*b.x,a*b.y,a*b.z)
+        end
+        if is_a(b,"number") then
+            return __quat(a.w*b,a.x*b,a.y*b,a.z*b)
+        end
+        if is_a(a,matrix) then
+            return a:__mul(b:tomatrixleft())
+        end
+        if is_a(b,matrix) then
+            return a:tomatrixleft():__mul(b)
+        end
+        return mulq(a,b)
+    end
+    
+    m["conjugate"] = function (q)
+        return __quat(q.w,-q.x,-q.y,-q.z)
+    end
+    
+    m["co"] = m["conjugate"]
+    
+    m["__div"] = function (a,b)
+        if is_a(b,"number") then
+            return __quat(a.w/b,a.x/b,a.y/b,a.z/b)
+        end
+        local l = b:lenSqr()
+        b = __quat(b.w/l,-b.x/l,-b.y/l,-b.z/l)
+        if is_a(a,"number") then
+            return __quat(a*b.w,a*b.x,a*b.y,a*b.z)
+        end
+        return mulq(a,b)
+    end
+    
+    function integerpower(q,n)
+        if n == 0 then
+            return __quat(1,0,0,0)
+        elseif n > 0 then
+            return q:__mul(integerpower(q,n-1))
+        elseif n < 0 then
+            local l = q:lenSqr()
+            q = __quat(q.w/l,-q.x/l,-q.y/l,-q.z/l)
+            return integerpower(q,-n)
+        end
+    end
+    
+    function realpower(q,n)
+        if n == floor(n) then
+            return integerpower(q,n)
+        end
+        local l = q:len()
+        q = q:normalise()
+        return l^n * q:slerp(n)
+    end
+    
+    m["__pow"] = function (q,n)
+        if is_a(n,"number") then
+            return realpower(q,n)
+        elseif is_a(n,quat) then
+            return n:__mul(q):__div(n)
+        else
+            return q:conjugate()
+        end
+    end
+    
+    m["lerp"] = function (q,qq,t)
+        if not t then
+            q,qq,t = __quat(1,0,0,0),q,qq
+        end
+        if (q + qq):len() == 0 then
+            q = (1 - 2*t) * q + (1 - abs(2*t - 1)) * __quat(q.x,-q.w,q.z,-q.y)
+        else
+            q = (1-t)*q + t*qq
+        end
+        return q:normalise()
+    end
+    --[[
+    m["slerp"] = function (q,qq,t)
+        if not t then
+            q,qq,t = quat(1,0,0,0),q,qq
+        end
+        if (q + qq):len() == 0 then
+            qq,t = quat(q.x,-q.w,q.z,-q.y),2*t
+        elseif (q - qq):len() == 0 then
+            return q
+        end
+        local ca = q:dot(qq)
+        local sa = sqrt(1 - pow(ca,2))
+        if sa == 0 or sa ~= sa then
+            return q
+        end
+        local a = acos(ca)
+        sa = sin(a*t)/sa
+        return (cos(a*t)-ca*sa)*q+sa*qq
+    end
+    --]]
+    m["make_lerp"] = function (q,qq)
+        if not qq then
+            q,qq = __quat(1,0,0,0),q
+        end
+        q,qq = q:normalise(),qq:normalise()
+        if (q + qq):len() == 0 then
+            qq = __quat(q.x,-q.w,q.z,-q.y)
+            return function(t)
+                return ((1-2*t)*q+(1-abs(2*t-1))*qq):normalise()
+            end
+        else
+            return function(t)
+                return ((1-t)*q+t*qq):normalise()
+            end
+            
+        end
+    end
+    
+    m["make_slerp"] = function (q,qq)
+        if not qq then
+            q,qq = __quat(1,0,0,0),q
+        end
+        q,qq = q:normalise(),qq:normalise()
+        local f
+        if (q + qq):len() == 0 then
+            qq,f = __quat(q.x,-q.w,q.z,-q.y),2
+        elseif (q - qq):len() == 0 then
+            return function(t)
+                return q
+            end
+        else
+            f = 1
+        end
+        local ca = q:dot(qq)
+        local sa = sqrt(1 - pow(ca,2))
+        if sa == 0 or sa ~= sa then
+            return function(t)
+                return q
+            end
+        end
+        local a = acos(ca)
+        qq = (qq - ca*q)/sa
+        return function(t)
+            return cos(a*f*t)*q + sin(a*f*t)*qq
+        end
+    end
+    
+    m["toreal"] = function (q)
+        return q.w
+    end
+    
+    m["vector"] = function (q)
+        return vec3(q.x, q.y, q.z)
+    end
+    
+    m["tovector"] = m["vector"]
+    
+    m["log"] = function (q)
+        local l = q:slen()
+        q = q:tovector():normalize()
+        if not q:is_finite() then
+            return vec3(0,0,0)
+        else
+            return q * l
+        end
+    end
+    
+    m["tostring"] = function (q)
+        local s
+        local im = {{q.x,"i"},{q.y,"j"},{q.z,"k"}}
+        if q.x ~= 0 then
+            s = string.format("%.3f",q.w)
+        end
+        for k,v in pairs(im) do
+            if v[1] ~= 0 then
+                if s then
+                    if v[1] > 0 then
+                        if v[1] == 1 then
+                            s = s.." + "..v[2]
+                        else
+                            s = s.." + "..string.format("%.3f",v[1])..v[2]
+                            
+                        end
+                    else
+                        if v[1] == -1 then
+                            s = s.." - "..v[2]
+                        else
+                            s = s.." - "..string.format("%.3f",-v[1])..v[2]
+                        end
+                    end
+                else
+                    if v[1] == 1 then
+                        s = v[2]
+                    elseif v[1] == - 1 then
+                        s = "-" .. v[2]
+                    else
+                        s = string.format("%.3f",v[1]) .. v[2]
+                    end
+                end
+            end
+        end
+        s = s or "0"
+        return s
+    end
+    
+    m["__concat"] = function (q,s)
+        if is_a(s,"string") then
+            return q:tostring() .. s
+        else
+            return q .. s:tostring()
+        end
+    end
+    
+    m["tomatrixleft"] = function (q)
+        q = q:normalise()
+        local a,b,c,d = q.w,q.x,q.y,q.z
+        local ab,ac,ad,bb,bc,bd,cc,cd,dd = 2*a*b,2*a*c,2*a*d,2*b*b,2*b*c,2*b*d,2*c*c,2*c*d,2*d*d
+        return matrix(
+        1-cc-dd, bc-ad, ac+bd, 0,
+        bc+ad, 1-bb-dd, cd-ab, 0,
+        bd-ac, cd+ab, 1-bb-cc, 0,
+        0,0,0,1
+        )
+    end
+    
+    m["tomatrixright"] = function (q)
+        q = q:normalise()
+        local a,b,c,d = q.w,-q.x,-q.y,-q.z
+        local ab,ac,ad,bb,bc,bd,cc,cd,dd = 2*a*b,2*a*c,2*a*d,2*b*b,2*b*c,2*b*d,2*c*c,2*c*d,2*d*d
+        return matrix(
+        1-cc-dd, bc-ad, ac+bd, 0,
+        bc+ad, 1-bb-dd, cd-ab, 0,
+        bd-ac, cd+ab, 1-bb-cc, 0,
+        0,0,0,1
+        )
+    end
+    
+    m["tomatrix"] = m["tomatrixright"]
+    
+    m["toangleaxis"] = function (q)
+        q = q:normalise()
+        local a = q.w
+        q = vec3(q.x,q.y,q.z)
+        if q == vec3(0,0,0) then
+            return 0,vec3(0,0,1)
+        end
+        return 2*acos(a),q:normalise()
+    end
+    
+    m["Gravity"] = function (q)
+        local y = vec3(0,-1,0)^q
+        return quat.fromToRotation(y,Gravity)*q
+    end
+    m.__extended = true
+    
+    for k,v in pairs(m) do
+        rawset(mq,k,v)
+    end
 end
 
 local exports = {
@@ -1340,7 +1834,9 @@ local exports = {
    qEuler = qEuler,
    qTangent = qTangent,
    qGravity = qGravity,
+   quatGravity = quatGravity,
    qRotationRate = qRotationRate,
+   quatRotationRate = quatRotationRate,
    modelMatrix = modelMatrix,
    applyMatrix = applyMatrix,
    viewMatrix = viewMatrix,
@@ -1361,6 +1857,13 @@ local exports = {
    text = text,
     clip = clip
 }
+
+if quat then
+    extendQuat()
+else
+    exports["extendQuat"] = extendQuat
+end
+
 if cmodule then
    cmodule.export(exports)
 else
