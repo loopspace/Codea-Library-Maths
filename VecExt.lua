@@ -351,8 +351,9 @@ if not m.__extended then
         return max(abs(c.x - v.x), abs(c.y - v.y))
     end
 
-    m["random"] = function()
-        local th = 2*pi*random()
+    m["random"] = function(rnd)
+        rnd = rnd or random
+        local th = 2*pi*rnd()
         return vec2(cos(th),sin(th))
     end
 end
@@ -1359,9 +1360,10 @@ if not m.__extended then
         return max(abs(c.x - v.x), abs(c.y - v.y), abs(c.z - v.z))
     end
    
-    m["random"] = function()
-        local th = 2*pi*random()
-        local z = 2*random() - 1
+    m["random"] = function(rnd)
+        rnd = rnd or random
+        local th = 2*pi*rnd()
+        local z = 2*rnd() - 1
         local r = sqrt(1 - z*z)
         return vec3(r*cos(th),r*sin(th),z)
     end
@@ -1559,8 +1561,9 @@ function extendQuat()
         return cos(t)*__quat(1,0,0,0) + sin(t)*qn
     end)
     
-    rawset(quat,"random",function()
-        local u,v,w = random(),2*pi*random(),2*pi*random()
+    rawset(quat,"random",function(rnd)
+        rnd = rnd or random
+        local u,v,w = rnd(),2*pi*rnd(),2*pi*rnd()
         local s,t = sqrt(1-u),sqrt(u)
         return __quat(s*sin(v),s*cos(v),t*sin(w),t*cos(w))
     end)

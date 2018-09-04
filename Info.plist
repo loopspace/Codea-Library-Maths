@@ -3,18 +3,13 @@
 <plist version="1.0">
 <dict>
 	<key>Author</key>
-	<string>Andrew Stacey</string>
+	<string>Unknown</string>
 	<key>Buffer Order</key>
 	<array>
-		<string>ChangeLog</string>
-		<string>ComplexExt</string>
 		<string>Main</string>
-		<string>Matrix</string>
-		<string>Complex</string>
-		<string>Quaternion</string>
-		<string>QuaternionExt</string>
-		<string>Vec3</string>
+		<string>ChangeLog</string>
 		<string>VecExt</string>
+		<string>Matrix</string>
 		<string>Vector</string>
 	</array>
 	<key>Created</key>
@@ -26,10 +21,6 @@
 		<string>Codea Community Dev</string>
 	</array>
 	<key>Description</key>
-	<string>A library of classes and functions for mathematical objects.</string>
-	<key>Project</key>
-	<string>Library Maths</string>
-	<key>Version</key>
-	<real>2</real>
+	<string>No description available</string>
 </dict>
 </plist>
