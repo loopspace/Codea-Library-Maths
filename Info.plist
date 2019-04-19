@@ -11,14 +11,13 @@
 		<string>VecExt</string>
 		<string>Matrix</string>
 		<string>Vector</string>
-	</array>
-	<key>Created</key>
-	<date>2011-11-19T09:27:53Z</date>
-	<key>Dependencies</key>
-	<array>
-		<string>CModule</string>
-		<string>AutoGist</string>
-		<string>Codea Community Dev</string>
+		<string>Vec3</string>
+		<string>ccConfig</string>
+		<string>QuaternionExt</string>
+		<string>Complex</string>
+		<string>ComplexExt</string>
+		<string>Quaternion</string>
+		<string>VectorExtension</string>
 	</array>
 	<key>Description</key>
 	<string>No description available</string>

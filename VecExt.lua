@@ -45,6 +45,8 @@ local _ellipse = ellipse
 local _line = line
 local _rect = rect
 local _sprite = sprite
+local _image = image
+local _readImage = readImage
 local _text = text
 local _clip = clip
 
@@ -56,6 +58,11 @@ local function __quat(a,b,c,d)
     q.y = c
     q.z = d
     return q
+end
+
+local function Heaviside(t)
+    local s = floor(t)+.5
+    return s/abs(s)/2+.5
 end
 
 --[[
@@ -500,6 +507,8 @@ if not math.__extended then
       end
       error("Cannot take the logarithm of " .. n)
    end
+    
+    math.olog = log
    
    m.__extended = true
 end
@@ -868,7 +877,7 @@ if not qGravity then
 	 return vec4(1,0,0,0)
       else
 	 local gxy, gy, gygxy, a, b, c, d
-	 gy,gxy = - Gravity.y,sq(pow(Gravity.x,2) + pow(Gravity.y,2))
+	 gy,gxy = - Gravity.y,sqrt(pow(Gravity.x,2) + pow(Gravity.y,2))
 	 gygxy = gy/gxy
 	 a,b,c,d = sqrt(1 + gxy - gygxy - gy)/2, sqrt(1 - gxy - gygxy + gy)/2, sqrt(1 - gxy + gygxy - gy)/2, sqrt(1 + gxy + gygxy + gy)/2
 	 if Gravity.z < 0 then
@@ -888,7 +897,7 @@ if not qGravity then
 	 return __quat(1,0,0,0)
       else
 	 local gxy, gy, gygxy, a, b, c, d
-	 gy,gxy = - Gravity.y,sq(pow(Gravity.x,2) + pow(Gravity.y,2))
+	 gy,gxy = - Gravity.y,sqrt(pow(Gravity.x,2) + pow(Gravity.y,2))
 	 gygxy = gy/gxy
 	 a,b,c,d = sqrt(1 + gxy - gygxy - gy)/2, sqrt(1 - gxy - gygxy + gy)/2, sqrt(1 - gxy + gygxy - gy)/2, sqrt(1 + gxy + gygxy + gy)/2
 	 if Gravity.z < 0 then
@@ -1171,6 +1180,31 @@ if not qGravity then
             _sprite(a)
       end
    end
+    
+   function readImage(a,w,h,n)
+      if is_a(w,vec2) then
+            w,h,n = w.x,w.y,h
+      end
+      if n then
+	 return _readImage(a,w,h,n)
+      elseif h then
+	return _readImage(a,w,h)
+      elseif w then
+	 return _readImage(a,w)
+            else
+           return _readImage(a)
+      end
+   end
+    
+    function image(w,h)
+        if is_a(w,vec2) then
+            w,h = w.x,w.y
+        end
+        if h then
+            return _image(w,h)
+        end
+        return _image(w)
+    end
    
    function text(a,x,y)
       if is_a(x,vec2) then
@@ -1366,6 +1400,18 @@ if not m.__extended then
         local z = 2*rnd() - 1
         local r = sqrt(1 - z*z)
         return vec3(r*cos(th),r*sin(th),z)
+    end
+    
+    m["orthogonal"] = function(v)
+        local x,y,z = abs(v.x), abs(v.y), abs(v.z)
+        local xy = Heaviside(x-y)
+        local yz = Heaviside(y-z)
+        local zx = Heaviside(z-x)
+        return v:cross(vec3(
+            zx*(1-xy) + xy*yz*zx,
+            xy*(1-yz),
+            yz*(1-zx)
+        ))
     end
     
    m.__extended = true
@@ -1869,6 +1915,8 @@ local exports = {
    ellipse = ellipse,
    rect = rect,
    sprite = sprite,
+    readImage = readImage,
+    image = image,
    text = text,
     clip = clip
 }
